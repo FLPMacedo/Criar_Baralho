@@ -1,3 +1,4 @@
+# 🎧 Anki Audio Deck Generator
 # 🎧 Gerador de Baralho Anki com Áudio (TTS)
 
 Este projeto é um **gerador automático de baralhos Anki com áudio**, focado no estudo de idiomas (Inglês ↔ Português).
