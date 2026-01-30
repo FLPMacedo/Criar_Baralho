@@ -36,6 +36,10 @@ Isso permite:
 - menos cards excessivamente fragmentados
 
 ---
+## 💬 Community & Support
+
+Have questions or ideas?  
+Open an **Issue** and let’s talk about it 🚀
 
 ## 🖥️ Requisitos
 
