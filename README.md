@@ -11,8 +11,8 @@ Ele recebe textos em dois idiomas, divide em frases, **agrupa as frases em bloco
 
 I share tutorials and language-learning strategies on YouTube:
 
-🔗 https://youtube.com/@FLPNews
-
+[🔗 https://youtube.com/@FLPNews
+](https://youtu.be/FtT5yXJ-YJs)
 
 ## 🚀 Funcionalidades
 
