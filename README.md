@@ -1,3 +1,4 @@
+
 # 🎧 Anki Audio Deck Generator
 # 🎧 Gerador de Baralho Anki com Áudio (TTS)
 
@@ -6,6 +7,12 @@ Este projeto é um **gerador automático de baralhos Anki com áudio**, focado n
 Ele recebe textos em dois idiomas, divide em frases, **agrupa as frases em blocos configuráveis**, gera áudios com Text-to-Speech (TTS) e cria automaticamente um baralho Anki pronto para importação.
 
 ---
+## 📺 Content & Tutorials
+
+I share tutorials and language-learning strategies on YouTube:
+
+🔗 https://youtube.com/@FLPNews
+
 
 ## 🚀 Funcionalidades
 
