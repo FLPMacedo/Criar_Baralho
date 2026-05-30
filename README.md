@@ -21,7 +21,7 @@ Estudar inglês com input apenas visual (ler texto, fazer exercício de gramáti
 - **repetição espaçada** — via Anki, com cards reversos pra forçar produção
 - **um lote por semana** — texto novo virando baralho em minutos
 
-O método completo, com cronograma de 30 dias e dicas de onde tirar textos, está no PDF [Material_DestravarIngles.pdf](pdf/Material_DestravarIngles.pdf).
+O método completo, com cronograma de 30 dias e dicas de onde tirar textos, está no PDF [Material_DestravarIngles.pdf](assets/bonus/Material_DestravarIngles.pdf).
 
 ## Funcionalidades
 
@@ -65,19 +65,13 @@ Saída em `dist/AnkiAudio_v2.exe`.
 ## Estrutura do projeto
 
 ```
-Criar_BaralhoComAudios_v2.py    app v2 (atual)
-Criar_BaralhoComAudios.py       app v1 (legado)
+Criar_BaralhoComAudios_v2.py    app principal
 AnkiAudio_v2.spec               configuração do PyInstaller
 requirements.txt                dependências
 assets/
   uaiscript.ico                 ícone do app
   uaiscript.png                 avatar do canal
-  bonus/                        PDFs embutidos no app
-pdf/                            materiais gratuitos
-gerar_material.py               regenera Material_DestravarIngles.pdf
-gerar_roteiro_pdf.py            regenera Roteiro_Video.pdf
-Roteiro_Video.md / .pdf         roteiro do vídeo de apresentação
-Temas_DestravarIngles.md        índice dos 21 temas do ebook
+  bonus/                        PDFs embutidos no app (aba 🎁 Bônus)
 ```
 
 ## Materiais incluídos
@@ -87,7 +81,7 @@ Dois PDFs do canal, distribuição livre:
 - **Como Destravar o Inglês** — método de imersão por áudio + cronograma de 30 dias
 - **21 Temas Cativantes para Criar Textos e Flashcards no Anki** — ebook com 21 temas (rotina, esportes, viagens, finanças, música, fé, e mais) e centenas de títulos prontos para virar texto bilíngue
 
-Ambos estão na pasta [pdf/](pdf/) e também aparecem como botões dentro do app, na aba **🎁 Bônus**.
+Ambos estão na pasta [assets/bonus/](assets/bonus/) e também aparecem como botões dentro do app, na aba **🎁 Bônus**.
 
 ## Stack
 
