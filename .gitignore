@@ -1,6 +1,23 @@
+# Python
 venv/
 .venv/
 __pycache__/
+*.pyc
+
+# Output dos baralhos gerados
 output/
 audios/
 *.log
+logs/
+
+# PyInstaller build artifacts
+build/
+dist/
+
+# Config local (gerada pelo app a cada usuário)
+config_v2.json
+
+# IDE / ferramentas locais
+.claude/
+.idea/
+.vscode/
