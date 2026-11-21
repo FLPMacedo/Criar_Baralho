@@ -522,6 +522,16 @@ class AnkiApp(ctk.CTk):
         )
         self.chk_tresvel.pack(anchor="w", padx=18, pady=(8, 0))
 
+        self.chk_imersao = ctk.CTkCheckBox(
+            card_acoes,
+            text="🌊  Modo imersão — ouça sem ler; na resposta o português fica "
+                 "escondido (clique pra ver) e sem áudio PT",
+            font=FONT_LABEL, text_color=COLOR_TEXT_DIM,
+            fg_color=COLOR_ACCENT, hover_color=COLOR_ACCENT_HOVER,
+            checkbox_width=20, checkbox_height=20,
+        )
+        self.chk_imersao.pack(anchor="w", padx=18, pady=(8, 0))
+
         botoes = ctk.CTkFrame(card_acoes, fg_color="transparent")
         botoes.pack(fill="x", padx=14, pady=14)
         self.btn_gerar = ctk.CTkButton(
@@ -1112,6 +1122,7 @@ class AnkiApp(ctk.CTk):
         self.running = True
         self._sem_legenda = bool(self.chk_escuta.get())  # modo escuta: card só com áudio
         self._tres_vel = bool(self.chk_tresvel.get())  # 3 velocidades no áudio EN
+        self._imersao = bool(self.chk_imersao.get())  # imersão: PT escondido, sem áudio PT
         self.btn_gerar.configure(state="disabled")
         self.btn_cancelar.configure(state="normal")
 
@@ -1280,9 +1291,12 @@ class AnkiApp(ctk.CTk):
 
         sem_legenda = getattr(self, "_sem_legenda", False)
         tres_vel = getattr(self, "_tres_vel", False)
+        imersao = getattr(self, "_imersao", False)
         css += ("\n.players{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:8px 0}"
                 "\n.spd{font-size:13px;color:#8b949e}"
-                "\n.hint{color:#8b949e;font-size:14px;margin-bottom:12px}\n")
+                "\n.hint{color:#8b949e;font-size:14px;margin-bottom:12px}"
+                "\n.trad{margin-top:14px}.trad summary{cursor:pointer;color:#2ea88a;font-size:14px}"
+                "\n.trad .pt{margin-top:8px}\n")
 
         # Players de áudio EN: 1 velocidade, ou 3 (lento/médio/rápido) via campos
         # condicionais do Anki — os campos lento/rápido ficam vazios quando não marcado.
@@ -1302,7 +1316,21 @@ class AnkiApp(ctk.CTk):
             {"name": "AudioPT"},
             {"name": "Autor"},
         ]
-        if sem_legenda:
+        if imersao:
+            model = genanki.Model(
+                MODEL_ID + 4, "Imersão v3 (PT escondido, sem áudio PT)",
+                fields=fields_def,
+                templates=[{
+                    "name": "Imersão",
+                    "qfmt": "<div class='hint'>🌊 Imersão — ouça sem ler</div>" + players_en,
+                    "afmt": "{{FrontSide}}<hr>{{Ingles}}" + players_en
+                            + "<details class='trad'><summary>👁 ver tradução (PT)</summary>"
+                            + "<div class='pt'>{{Portugues}}</div></details>"
+                            + "<div class='autor'>{{Autor}}</div>",
+                }],
+                css=css,
+            )
+        elif sem_legenda:
             model = genanki.Model(
                 MODEL_ID + 3, "Escuta v3 (áudio → texto)",
                 fields=fields_def,
