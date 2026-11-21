@@ -31,6 +31,8 @@ import customtkinter as ctk
 import edge_tts
 import genanki
 import pygame
+
+import db  # v3: camada de dados (SQLite)
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4
@@ -218,6 +220,7 @@ class AnkiApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.config_data = load_config()
+        db.init_db()  # v3: garante o banco de dados (projetos, baralhos)
 
         self.title("Gerador Anki + Áudio — v2")
         self.geometry("1180x780")
@@ -274,6 +277,7 @@ class AnkiApp(ctk.CTk):
         self.nav_buttons = {}
         for key, label, icon in [
             ("criar", "Criar Baralho", "▶"),
+            ("biblioteca", "Meus Baralhos", "📚"),
             ("bonus", "Bônus", "🎁"),
             ("config", "Configurações", "⚙"),
             ("sobre", "Sobre", "ℹ"),
@@ -320,6 +324,7 @@ class AnkiApp(ctk.CTk):
 
         self.views = {
             "criar": self._build_view_criar(),
+            "biblioteca": self._build_view_biblioteca(),
             "bonus": self._build_view_bonus(),
             "config": self._build_view_config(),
             "sobre": self._build_view_sobre(),
@@ -329,6 +334,8 @@ class AnkiApp(ctk.CTk):
         for v in self.views.values():
             v.pack_forget()
         self.views[key].pack(fill="both", expand=True, padx=24, pady=20)
+        if key == "biblioteca":
+            self._refresh_biblioteca()
         for k, btn in self.nav_buttons.items():
             if k == key:
                 btn.configure(fg_color=COLOR_CARD, text_color=COLOR_ACCENT)
@@ -494,6 +501,95 @@ class AnkiApp(ctk.CTk):
         self.btn_cancelar.pack(side="right", padx=4)
 
         return view
+
+    # -------- VIEW: MEUS BARALHOS (v3) --------
+    def _build_view_biblioteca(self) -> ctk.CTkFrame:
+        view = ctk.CTkFrame(self.main, fg_color="transparent")
+        ctk.CTkLabel(
+            view, text="Meus Baralhos", font=FONT_TITLE, text_color=COLOR_TEXT
+        ).pack(anchor="w", pady=(0, 4))
+        ctk.CTkLabel(
+            view,
+            text="Seus projetos salvos. Reabra pra editar os textos e gerar o baralho de novo.",
+            font=FONT_LABEL, text_color=COLOR_TEXT_DIM,
+        ).pack(anchor="w", pady=(0, 14))
+        self.biblioteca_scroll = ctk.CTkScrollableFrame(view, fg_color="transparent")
+        self.biblioteca_scroll.pack(fill="both", expand=True)
+        return view
+
+    def _refresh_biblioteca(self):
+        for w in self.biblioteca_scroll.winfo_children():
+            w.destroy()
+        try:
+            projetos = db.listar_projetos()
+        except Exception:
+            log.exception("Falha ao listar projetos")
+            projetos = []
+        if not projetos:
+            ctk.CTkLabel(
+                self.biblioteca_scroll,
+                text="Nenhum projeto salvo ainda.\n\nGere um baralho na aba "
+                     "'Criar Baralho' — ele aparece aqui automaticamente.",
+                font=FONT_LABEL, text_color=COLOR_TEXT_DIM, justify="left",
+            ).pack(anchor="w", padx=6, pady=20)
+            return
+        for p in projetos:
+            card = self._card(self.biblioteca_scroll)
+            card.pack(fill="x", pady=6)
+            info = ctk.CTkFrame(card, fg_color="transparent")
+            info.pack(fill="x", padx=16, pady=(14, 2))
+            ctk.CTkLabel(
+                info, text=p["nome"], font=("Segoe UI Semibold", 16),
+                text_color=COLOR_TEXT, anchor="w",
+            ).pack(anchor="w")
+            n_en = len(split_sentences(p.get("texto_en") or ""))
+            n_bar = len(db.listar_baralhos(p["id"]))
+            ctk.CTkLabel(
+                info,
+                text=f"{n_en} frases · {n_bar} baralho(s) gerado(s) · "
+                     f"atualizado {str(p['atualizado_em'])[:10]}",
+                font=("Segoe UI", 11), text_color=COLOR_TEXT_DIM, anchor="w",
+            ).pack(anchor="w")
+            botoes = ctk.CTkFrame(card, fg_color="transparent")
+            botoes.pack(fill="x", padx=12, pady=(6, 12))
+            ctk.CTkButton(
+                botoes, text="✏  Abrir", width=110, height=34,
+                font=("Segoe UI Semibold", 12), fg_color=COLOR_ACCENT,
+                hover_color=COLOR_ACCENT_HOVER, text_color="#0b1d18",
+                corner_radius=8, command=lambda pr=p: self._carregar_projeto(pr),
+            ).pack(side="left", padx=4)
+            ctk.CTkButton(
+                botoes, text="🗑  Excluir", width=110, height=34,
+                font=("Segoe UI", 12), fg_color="transparent", border_width=1,
+                border_color=COLOR_DANGER, hover_color="#3a1f1d",
+                text_color=COLOR_DANGER, corner_radius=8,
+                command=lambda pr=p: self._excluir_projeto(pr),
+            ).pack(side="left", padx=4)
+
+    def _carregar_projeto(self, proj):
+        self.entry_nome.delete(0, "end")
+        self.entry_nome.insert(0, proj["nome"])
+        self.txt_en.delete("1.0", "end")
+        self.txt_en.insert("1.0", proj.get("texto_en") or "")
+        self.txt_pt.delete("1.0", "end")
+        self.txt_pt.insert("1.0", proj.get("texto_pt") or "")
+        self._atualizar_contador()
+        self._show_view("criar")
+        self._status(f"Projeto '{proj['nome']}' carregado.")
+
+    def _excluir_projeto(self, proj):
+        if not messagebox.askyesno(
+            "Excluir",
+            f"Excluir o projeto '{proj['nome']}' da biblioteca?\n\n"
+            "(Os arquivos já gerados em disco NÃO são apagados.)",
+        ):
+            return
+        try:
+            db.excluir_projeto(proj["id"])
+            self._refresh_biblioteca()
+        except Exception as e:
+            log.exception("Falha ao excluir projeto")
+            messagebox.showerror("Erro", str(e))
 
     # -------- VIEW: CONFIG --------
     def _build_view_config(self) -> ctk.CTkFrame:
@@ -1030,6 +1126,20 @@ class AnkiApp(ctk.CTk):
                 texto_en, texto_pt, autor,
             )
             done += 1
+
+            # v3: salva o projeto na biblioteca + registra o baralho no banco
+            try:
+                existentes = [x for x in db.listar_projetos() if x["nome"] == nome_deck]
+                pid = existentes[0]["id"] if existentes else None
+                pid = db.salvar_projeto(
+                    nome_deck, texto_en=texto_en, texto_pt=texto_pt,
+                    voz_en=voz_en, voz_pt=voz_pt, rate=cfg["rate"], projeto_id=pid,
+                )
+                db.registrar_baralho(
+                    pid, nome_deck, os.path.abspath(apkg_path), len(frases_en),
+                )
+            except Exception:
+                log.exception("Falha ao salvar no banco (nao bloqueia a geracao)")
 
             self._set_progress(total, total, "Finalizado!")
             log.info(f"Projeto finalizado: {projeto_dir}")
