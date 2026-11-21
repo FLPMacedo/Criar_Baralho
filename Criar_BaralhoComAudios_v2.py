@@ -1300,11 +1300,15 @@ class AnkiApp(ctk.CTk):
 
         # Players de áudio EN: 1 velocidade, ou 3 (lento/médio/rápido) via campos
         # condicionais do Anki — os campos lento/rápido ficam vazios quando não marcado.
+        # O médio é [sound:] → o Anki toca sozinho ao abrir o card. O lento e o
+        # rápido são players HTML5 (controls, preload='none') → tocam só no clique.
         players_en = (
             "<div class='players'>"
-            "{{#AudioEN_lento}}<div class='spd'>🐢 lento<br>{{AudioEN_lento}}</div>{{/AudioEN_lento}}"
-            "<div class='spd'>▶ médio<br>{{AudioEN}}</div>"
-            "{{#AudioEN_rapido}}<div class='spd'>🐇 rápido<br>{{AudioEN_rapido}}</div>{{/AudioEN_rapido}}"
+            "<div class='spd'>▶ médio (automático)<br>{{AudioEN}}</div>"
+            "{{#AudioEN_lento}}<div class='spd'>🐢 lento<br>"
+            "<audio controls preload='none' src='{{AudioEN_lento}}'></audio></div>{{/AudioEN_lento}}"
+            "{{#AudioEN_rapido}}<div class='spd'>🐇 rápido<br>"
+            "<audio controls preload='none' src='{{AudioEN_rapido}}'></audio></div>{{/AudioEN_rapido}}"
             "</div>"
         )
         fields_def = [
@@ -1368,8 +1372,9 @@ class AnkiApp(ctk.CTk):
         media_files = []
 
         for i, (en, pt) in enumerate(zip(frases_en, frases_pt), start=1):
-            a_lento = f"[sound:{i:03}_en_lento.mp3]" if tres_vel else ""
-            a_rapido = f"[sound:{i:03}_en_rapido.mp3]" if tres_vel else ""
+            # nome puro do arquivo (vira player HTML5 no template, não autoplay)
+            a_lento = f"{i:03}_en_lento.mp3" if tres_vel else ""
+            a_rapido = f"{i:03}_en_rapido.mp3" if tres_vel else ""
             note = genanki.Note(
                 model=model,
                 fields=[
