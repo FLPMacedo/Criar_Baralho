@@ -27,6 +27,16 @@ def resource_path(relative: str) -> str:
     base = getattr(sys, "_MEIPASS", os.path.abspath("."))
     return os.path.join(base, relative)
 
+
+# Diretório base do app: ao lado do .exe (empacotado) ou do .py (dev). Tudo que
+# o app grava (output, logs, config, banco) fica ancorado AQUI — não no diretório
+# de trabalho, que muda conforme como o exe é aberto.
+if getattr(sys, "frozen", False):
+    APP_DIR = os.path.dirname(sys.executable)
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
+os.environ.setdefault("ANKIAUDIO_DB", os.path.join(APP_DIR, "ankiaudio.db"))
+
 import customtkinter as ctk
 import edge_tts
 import genanki
@@ -52,9 +62,9 @@ from reportlab.platypus import (
 # =========================
 AUTOR = "@UaiScript"
 CANAL_URL = "https://www.youtube.com/@UaiScript"
-OUTPUT_DIR = "output"
-LOGS_DIR = "logs"
-CONFIG_FILE = "config_v2.json"
+OUTPUT_DIR = os.path.join(APP_DIR, "output")  # sempre ao lado do exe
+LOGS_DIR = os.path.join(APP_DIR, "logs")
+CONFIG_FILE = os.path.join(APP_DIR, "config_v2.json")
 MODEL_ID = 7894561231  # diferente da v1
 
 DEFAULT_CONFIG = {
@@ -1198,12 +1208,25 @@ class AnkiApp(ctk.CTk):
 
             self._set_progress(total, total, "Finalizado!")
             log.info(f"Projeto finalizado: {projeto_dir}")
-            self.after(0, lambda: messagebox.showinfo(
-                "Concluído",
-                f"Projeto criado em:\n{os.path.abspath(projeto_dir)}\n\n"
-                f"• Baralho: {os.path.basename(apkg_path)}\n"
-                f"• PDF: {os.path.basename(pdf_path)}",
-            ))
+            pasta_abs = os.path.abspath(projeto_dir)
+            apkg_nome = os.path.basename(apkg_path)
+            pdf_nome = os.path.basename(pdf_path)
+
+            def _concluido():
+                abrir = messagebox.askyesno(
+                    "Concluído",
+                    f"Projeto criado em:\n{pasta_abs}\n\n"
+                    f"• Baralho: {apkg_nome}\n"
+                    f"• PDF: {pdf_nome}\n\n"
+                    "Abrir a pasta agora?",
+                )
+                if abrir:
+                    try:
+                        os.startfile(pasta_abs)
+                    except Exception:
+                        log.exception("Falha ao abrir a pasta do projeto")
+
+            self.after(0, _concluido)
         except asyncio.CancelledError:
             self._status("Cancelado.")
             log.info("Cancelado")
