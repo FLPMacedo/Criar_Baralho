@@ -1160,7 +1160,7 @@ class AnkiApp(ctk.CTk):
             frases_dir = os.path.join(projeto_dir, "frases")
             os.makedirs(frases_dir, exist_ok=True)
 
-            por_frase = 5  # en, pt, mix, lento, rápido — 3 velocidades é regra fixa
+            por_frase = 3  # en, pt, mix (a velocidade é no player, não gera lento/rápido)
             total = (len(frases_en) * por_frase) + 2 + 2  # +2 áudios completos +2 (anki+pdf)
             done = 0
             log.info(f"Iniciando projeto '{nome_deck}' ({len(frases_en)} frases)")
@@ -1266,21 +1266,8 @@ class AnkiApp(ctk.CTk):
             )
             done += 1
             self._set_progress(done, total, f"Áudio MIX {i}/{len(frases_en)}")
-
-            if True:  # 3 velocidades (lento/rápido) é regra fixa agora
-                base = int(self.config_data["rate"])
-                r_lento = format_rate(max(-50, base - 30))
-                r_rapido = format_rate(min(50, base + 25))
-                await gerar_audio_async(
-                    en, voz_en, f"{frases_dir}/{i:03}_en_lento.mp3", r_lento, self.cancel_event,
-                )
-                done += 1
-                self._set_progress(done, total, f"Áudio lento {i}/{len(frases_en)}")
-                await gerar_audio_async(
-                    en, voz_en, f"{frases_dir}/{i:03}_en_rapido.mp3", r_rapido, self.cancel_event,
-                )
-                done += 1
-                self._set_progress(done, total, f"Áudio rápido {i}/{len(frases_en)}")
+            # Lento/rápido NÃO são mais gerados: a velocidade é controlada no
+            # próprio card (playbackRate) a partir do áudio médio.
 
         await gerar_audio_async(
             texto_en, voz_en, f"{projeto_dir}/texto_completo_en.mp3",
@@ -1311,33 +1298,43 @@ class AnkiApp(ctk.CTk):
         """
 
         sem_legenda = getattr(self, "_sem_legenda", False)
-        tres_vel = True  # 3 velocidades (lento/médio/rápido) é regra fixa agora
         imersao = getattr(self, "_imersao", False)
-        css += ("\n.players{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:8px 0}"
-                "\n.spd{font-size:13px;color:#8b949e}"
+        css += ("\n.players{display:flex;flex-direction:column;align-items:center;gap:8px;margin:10px 0}"
+                "\n.auto{font-size:13px;color:#8b949e}"
+                "\naudio.spd{width:280px;max-width:92%}"
+                "\n.spdrow{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}"
+                "\n.spdrow button{font-family:inherit;font-size:14px;cursor:pointer;color:#e6edf3;"
+                "background:#1b2430;border:1px solid #2ea88a;border-radius:8px;padding:6px 14px}"
+                "\n.spdrow button:hover{background:#2ea88a;color:#0f1419}"
+                "\n.spdrow button.on{background:#2ea88a;color:#0f1419}"
                 "\n.hint{color:#8b949e;font-size:14px;margin-bottom:12px}"
                 "\n.trad{margin-top:14px}.trad summary{cursor:pointer;color:#2ea88a;font-size:14px}"
                 "\n.trad .pt{margin-top:8px}\n")
 
-        # Players de áudio EN: 1 velocidade, ou 3 (lento/médio/rápido) via campos
-        # condicionais do Anki — os campos lento/rápido ficam vazios quando não marcado.
-        # O médio é [sound:] → o Anki toca sozinho ao abrir o card. O lento e o
-        # rápido são players HTML5 (controls, preload='none') → tocam só no clique.
+        # Áudio EN: UM player + botões de velocidade que mudam a playbackRate (a
+        # "escala"). Usa um arquivo só (o médio); lento/rápido são a mesma gravação
+        # tocada mais devagar/rápido. O médio ainda toca sozinho via [sound:]
+        # (mecanismo nativo do Anki, garantido). O player HTML5 é pra reouvir na
+        # velocidade escolhida.
         players_en = (
             "<div class='players'>"
-            "<div class='spd'>▶ médio (automático)<br>{{AudioEN}}</div>"
-            "{{#AudioEN_lento}}<div class='spd'>🐢 lento<br>"
-            "<audio controls preload='none' src='{{AudioEN_lento}}'></audio></div>{{/AudioEN_lento}}"
-            "{{#AudioEN_rapido}}<div class='spd'>🐇 rápido<br>"
-            "<audio controls preload='none' src='{{AudioEN_rapido}}'></audio></div>{{/AudioEN_rapido}}"
-            "</div>"
+            "<div class='auto'>▶ médio (toca automático) {{AudioEN}}</div>"
+            "<audio class='spd' controls preload='metadata' src='{{ArqEN}}'></audio>"
+            "<div class='spdrow'>"
+            "<button type='button' onclick='akSpd(this,0.75)'>🐢 lento</button>"
+            "<button type='button' onclick='akSpd(this,1)'>▶ normal</button>"
+            "<button type='button' onclick='akSpd(this,1.3)'>🐇 rápido</button>"
+            "</div></div>"
+            "<script>function akSpd(btn,r){var a=document.querySelector('audio.spd');"
+            "if(!a)return;a.playbackRate=r;a.currentTime=0;a.play();"
+            "var bs=btn.parentElement.getElementsByTagName('button');"
+            "for(var i=0;i<bs.length;i++)bs[i].className='';btn.className='on';}</script>"
         )
         fields_def = [
             {"name": "Ingles"},
             {"name": "Portugues"},
-            {"name": "AudioEN_lento"},
-            {"name": "AudioEN"},
-            {"name": "AudioEN_rapido"},
+            {"name": "AudioEN"},   # [sound:001_en.mp3] -> autoplay médio (nativo)
+            {"name": "ArqEN"},     # 001_en.mp3 (nome puro) -> player HTML5 com velocidade
             {"name": "AudioPT"},
             {"name": "Autor"},
         ]
@@ -1367,7 +1364,9 @@ class AnkiApp(ctk.CTk):
             3: "Imersão + Escuta v3",
         }
         model = genanki.Model(
-            MODEL_ID + 10 + variante, nomes[variante],
+            # +20: campos mudaram (player único + velocidade); ID novo pra não
+            # conflitar com baralhos já importados do modelo antigo (+10).
+            MODEL_ID + 20 + variante, nomes[variante],
             fields=fields_def,
             templates=[{
                 "name": "Card",
@@ -1382,18 +1381,14 @@ class AnkiApp(ctk.CTk):
         media_files = []
 
         for i, (en, pt) in enumerate(zip(frases_en, frases_pt), start=1):
-            # nome puro do arquivo (vira player HTML5 no template, não autoplay)
-            a_lento = f"{i:03}_en_lento.mp3" if tres_vel else ""
-            a_rapido = f"{i:03}_en_rapido.mp3" if tres_vel else ""
             note = genanki.Note(
                 model=model,
                 fields=[
                     en,
                     pt,
-                    a_lento,
-                    f"[sound:{i:03}_en.mp3]",
-                    a_rapido,
-                    f"[sound:{i:03}_pt.mp3]",
+                    f"[sound:{i:03}_en.mp3]",   # AudioEN: autoplay médio (nativo)
+                    f"{i:03}_en.mp3",           # ArqEN: nome puro p/ o player HTML5
+                    f"[sound:{i:03}_pt.mp3]",   # AudioPT
                     autor,
                 ],
             )
@@ -1403,11 +1398,6 @@ class AnkiApp(ctk.CTk):
                 f"{frases_dir}/{i:03}_pt.mp3",
                 f"{frases_dir}/{i:03}_mix.mp3",
             ])
-            if tres_vel:
-                media_files.extend([
-                    f"{frases_dir}/{i:03}_en_lento.mp3",
-                    f"{frases_dir}/{i:03}_en_rapido.mp3",
-                ])
 
         pacote = genanki.Package(deck)
         pacote.media_files = media_files
