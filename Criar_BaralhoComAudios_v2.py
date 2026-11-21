@@ -254,7 +254,7 @@ class AnkiApp(ctk.CTk):
         self.config_data = load_config()
         db.init_db()  # v3: garante o banco de dados (projetos, baralhos)
 
-        self.title("Gerador Anki + Áudio — v2")
+        self.title("AnkiAudio — v2 final")
         self.geometry("1180x780")
         self.minsize(1050, 720)
         self.configure(fg_color=COLOR_BG)
