@@ -220,6 +220,17 @@ async def gerar_audio_async(
             log.warning(f"Tentativa {attempt}/{max_retries} falhou para {caminho}: {e}")
             if attempt == max_retries:
                 log.error(f"Falha definitiva ao gerar {caminho}")
+                msg = str(e)
+                if ("403" in msg or "Invalid response status" in msg
+                        or "handshake" in msg.lower()):
+                    raise RuntimeError(
+                        "O serviço de voz (edge-tts) recusou a conexão (403).\n\n"
+                        "Isso acontece quando a Microsoft muda o token de "
+                        "autenticação e a versão do edge-tts fica desatualizada.\n\n"
+                        "Solução: atualize o edge-tts com\n"
+                        "    pip install -U edge-tts\n"
+                        "ou baixe a versão mais nova do app."
+                    ) from e
                 raise
             await asyncio.sleep(1.5 * attempt)
 
@@ -490,6 +501,16 @@ class AnkiApp(ctk.CTk):
             font=FONT_LABEL, text_color=COLOR_TEXT_DIM,
         )
         self.lbl_status.pack(anchor="w", padx=18)
+
+        self.chk_escuta = ctk.CTkCheckBox(
+            card_acoes,
+            text="🎧  Sem legenda (escuta apenas) — o card mostra só o áudio; "
+                 "o texto aparece na resposta",
+            font=FONT_LABEL, text_color=COLOR_TEXT_DIM,
+            fg_color=COLOR_ACCENT, hover_color=COLOR_ACCENT_HOVER,
+            checkbox_width=20, checkbox_height=20,
+        )
+        self.chk_escuta.pack(anchor="w", padx=18, pady=(10, 0))
 
         botoes = ctk.CTkFrame(card_acoes, fg_color="transparent")
         botoes.pack(fill="x", padx=14, pady=14)
@@ -1079,6 +1100,7 @@ class AnkiApp(ctk.CTk):
 
         self.cancel_event.clear()
         self.running = True
+        self._sem_legenda = bool(self.chk_escuta.get())  # modo escuta: card só com áudio
         self.btn_gerar.configure(state="disabled")
         self.btn_cancelar.configure(state="normal")
 
@@ -1229,34 +1251,60 @@ class AnkiApp(ctk.CTk):
         .autor { color: #8b949e; font-size: 12px; margin-top: 12px; }
         """
 
-        model = genanki.Model(
-            MODEL_ID,
-            "EN <-> PT com Áudio",
-            fields=[
-                {"name": "Ingles"},
-                {"name": "Portugues"},
-                {"name": "AudioEN"},
-                {"name": "AudioPT"},
-                {"name": "Autor"},
-            ],
-            templates=[
-                {
-                    "name": "EN -> PT",
-                    "qfmt": "{{AudioEN}}<br><br>{{Ingles}}",
-                    "afmt": "{{FrontSide}}<hr>"
-                            "<div class='pt'>{{Portugues}}</div>"
-                            "{{AudioPT}}"
-                            "<div class='autor'>{{Autor}}</div>",
-                },
-                {
-                    "name": "PT -> EN",
-                    "qfmt": "<div class='pt'>{{Portugues}}</div>",
-                    "afmt": "{{FrontSide}}<hr>{{Ingles}}<br>{{AudioEN}}"
-                            "<div class='autor'>{{Autor}}</div>",
-                },
-            ],
-            css=css,
-        )
+        sem_legenda = getattr(self, "_sem_legenda", False)
+        if sem_legenda:
+            # Modo escuta: frente só com o áudio (sem texto); texto na resposta.
+            css_escuta = css + "\n.hint{color:#8b949e;font-size:14px;margin-bottom:14px}\n"
+            model = genanki.Model(
+                MODEL_ID + 1,
+                "Escuta (áudio → texto)",
+                fields=[
+                    {"name": "Ingles"},
+                    {"name": "Portugues"},
+                    {"name": "AudioEN"},
+                    {"name": "AudioPT"},
+                    {"name": "Autor"},
+                ],
+                templates=[
+                    {
+                        "name": "Escuta",
+                        "qfmt": "<div class='hint'>🎧 Ouça e tente entender</div>{{AudioEN}}",
+                        "afmt": "{{FrontSide}}<hr>{{Ingles}}<br>"
+                                "<div class='pt'>{{Portugues}}</div>{{AudioPT}}"
+                                "<div class='autor'>{{Autor}}</div>",
+                    },
+                ],
+                css=css_escuta,
+            )
+        else:
+            model = genanki.Model(
+                MODEL_ID,
+                "EN <-> PT com Áudio",
+                fields=[
+                    {"name": "Ingles"},
+                    {"name": "Portugues"},
+                    {"name": "AudioEN"},
+                    {"name": "AudioPT"},
+                    {"name": "Autor"},
+                ],
+                templates=[
+                    {
+                        "name": "EN -> PT",
+                        "qfmt": "{{AudioEN}}<br><br>{{Ingles}}",
+                        "afmt": "{{FrontSide}}<hr>"
+                                "<div class='pt'>{{Portugues}}</div>"
+                                "{{AudioPT}}"
+                                "<div class='autor'>{{Autor}}</div>",
+                    },
+                    {
+                        "name": "PT -> EN",
+                        "qfmt": "<div class='pt'>{{Portugues}}</div>",
+                        "afmt": "{{FrontSide}}<hr>{{Ingles}}<br>{{AudioEN}}"
+                                "<div class='autor'>{{Autor}}</div>",
+                    },
+                ],
+                css=css,
+            )
 
         deck = genanki.Deck(deck_id, nome_deck)
         media_files = []
