@@ -21,3 +21,6 @@ config_v2.json
 .claude/
 .idea/
 .vscode/
+
+# bonus binario (nao versionar)
+assets/bonus/*.exe

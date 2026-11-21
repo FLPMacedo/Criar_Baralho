@@ -68,6 +68,17 @@ DEFAULT_CONFIG = {
 # arquivo dentro de assets/bonus/ (resolvido por resource_path).
 BONUS_ITEMS = [
     {
+        "file": "BizuDeck.exe",
+        "icon": "🧠",
+        "title": "BizuDeck — App de Quiz (bônus)",
+        "subtitle": "Quiz com áudio pra concursos e faculdade",
+        "desc": (
+            "App completo de brinde: gere quizzes com áudio a partir de "
+            "qualquer texto (formato P>/R>), estude no modo interativo e "
+            "exporte pro Anki. Clique em 'Abrir agora' para rodar o BizuDeck."
+        ),
+    },
+    {
         "file": "Material_DestravarIngles.pdf",
         "icon": "📄",
         "title": "Como Destravar o Inglês",
@@ -762,10 +773,11 @@ class AnkiApp(ctk.CTk):
             )
             return
         sugestao = item["file"]
+        ext = os.path.splitext(sugestao)[1] or ".pdf"
         dest = filedialog.asksaveasfilename(
             title=f"Salvar '{item['title']}' como…",
-            defaultextension=".pdf",
-            filetypes=[("PDF", "*.pdf")],
+            defaultextension=ext,
+            filetypes=[(ext.upper().lstrip("."), f"*{ext}"), ("Todos", "*.*")],
             initialfile=sugestao,
         )
         if not dest:
