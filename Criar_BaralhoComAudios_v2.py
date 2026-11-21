@@ -27,6 +27,16 @@ def resource_path(relative: str) -> str:
     base = getattr(sys, "_MEIPASS", os.path.abspath("."))
     return os.path.join(base, relative)
 
+
+# Diretório base do app: ao lado do .exe (empacotado) ou do .py (dev). Tudo que
+# o app grava (output, logs, config, banco) fica ancorado AQUI — não no diretório
+# de trabalho, que muda conforme como o exe é aberto.
+if getattr(sys, "frozen", False):
+    APP_DIR = os.path.dirname(sys.executable)
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
+os.environ.setdefault("ANKIAUDIO_DB", os.path.join(APP_DIR, "ankiaudio.db"))
+
 import customtkinter as ctk
 import edge_tts
 import genanki
@@ -52,9 +62,9 @@ from reportlab.platypus import (
 # =========================
 AUTOR = "@UaiScript"
 CANAL_URL = "https://www.youtube.com/@UaiScript"
-OUTPUT_DIR = "output"
-LOGS_DIR = "logs"
-CONFIG_FILE = "config_v2.json"
+OUTPUT_DIR = os.path.join(APP_DIR, "output")  # sempre ao lado do exe
+LOGS_DIR = os.path.join(APP_DIR, "logs")
+CONFIG_FILE = os.path.join(APP_DIR, "config_v2.json")
 MODEL_ID = 7894561231  # diferente da v1
 
 DEFAULT_CONFIG = {
@@ -244,9 +254,17 @@ class AnkiApp(ctk.CTk):
         self.config_data = load_config()
         db.init_db()  # v3: garante o banco de dados (projetos, baralhos)
 
-        self.title("Gerador Anki + Áudio — v2")
-        self.geometry("1180x780")
-        self.minsize(1050, 720)
+        self.title("AnkiAudio — v2 final")
+        # Telas de baixa resolução: nunca abre maior que a tela, e centraliza.
+        larg_alvo, alt_alvo = 1180, 780
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        larg = min(larg_alvo, sw - 60)
+        alt = min(alt_alvo, sh - 90)  # desconta barra de tarefas/título
+        px = max(0, (sw - larg) // 2)
+        py = max(0, (sh - alt) // 3)
+        self.geometry(f"{larg}x{alt}+{px}+{py}")
+        # minsize pequeno pra caber em telas pequenas; o conteúdo rola quando não cabe.
+        self.minsize(800, 500)
         self.configure(fg_color=COLOR_BG)
 
         ctk.set_appearance_mode("dark")
@@ -344,6 +362,11 @@ class AnkiApp(ctk.CTk):
         self.main = ctk.CTkFrame(self, fg_color=COLOR_BG, corner_radius=0)
         self.main.pack(side="right", fill="both", expand=True)
 
+        # Host rolável: em telas de baixa resolução o conteúdo rola (vertical)
+        # em vez de ficar cortado/fora da tela.
+        self.view_host = ctk.CTkScrollableFrame(self.main, fg_color="transparent")
+        self.view_host.pack(fill="both", expand=True)
+
         self.views = {
             "criar": self._build_view_criar(),
             "biblioteca": self._build_view_biblioteca(),
@@ -355,7 +378,7 @@ class AnkiApp(ctk.CTk):
     def _show_view(self, key: str):
         for v in self.views.values():
             v.pack_forget()
-        self.views[key].pack(fill="both", expand=True, padx=24, pady=20)
+        self.views[key].pack(fill="x", expand=False, anchor="n", padx=24, pady=20)
         if key == "biblioteca":
             self._refresh_biblioteca()
         for k, btn in self.nav_buttons.items():
@@ -376,7 +399,7 @@ class AnkiApp(ctk.CTk):
 
     # -------- VIEW: CRIAR --------
     def _build_view_criar(self) -> ctk.CTkFrame:
-        view = ctk.CTkFrame(self.main, fg_color="transparent")
+        view = ctk.CTkFrame(self.view_host, fg_color="transparent")
 
         # Cabeçalho
         header = ctk.CTkFrame(view, fg_color="transparent")
@@ -414,7 +437,7 @@ class AnkiApp(ctk.CTk):
 
         # Card: Textos (EN + PT lado a lado)
         card_textos = self._card(view)
-        card_textos.pack(fill="both", expand=True, pady=8)
+        card_textos.pack(fill="x", pady=8)
         card_textos.grid_columnconfigure(0, weight=1)
         card_textos.grid_columnconfigure(1, weight=1)
         card_textos.grid_rowconfigure(1, weight=1)
@@ -448,14 +471,14 @@ class AnkiApp(ctk.CTk):
         self.txt_en = ctk.CTkTextbox(
             card_textos, font=FONT_INPUT, fg_color=COLOR_BG,
             border_color=COLOR_BORDER, border_width=1, corner_radius=8,
-            wrap="word",
+            wrap="word", height=200,
         )
         self.txt_en.grid(row=1, column=0, sticky="nsew", padx=(18, 9), pady=(0, 8))
 
         self.txt_pt = ctk.CTkTextbox(
             card_textos, font=FONT_INPUT, fg_color=COLOR_BG,
             border_color=COLOR_BORDER, border_width=1, corner_radius=8,
-            wrap="word",
+            wrap="word", height=200,
         )
         self.txt_pt.grid(row=1, column=1, sticky="nsew", padx=(9, 18), pady=(0, 8))
 
@@ -502,30 +525,28 @@ class AnkiApp(ctk.CTk):
         )
         self.lbl_status.pack(anchor="w", padx=18)
 
+        self.lbl_tresvel = ctk.CTkLabel(
+            card_acoes,
+            text="🐢 ▶ 🐇  Todo baralho já vem em 3 velocidades (lento / médio "
+                 "automático / rápido).",
+            font=FONT_LABEL, text_color=COLOR_TEXT_DIM, anchor="w", justify="left",
+        )
+        self.lbl_tresvel.pack(anchor="w", padx=18, pady=(10, 2))
+
         self.chk_escuta = ctk.CTkCheckBox(
             card_acoes,
-            text="🎧  Sem legenda (escuta apenas) — o card mostra só o áudio; "
-                 "o texto aparece na resposta",
+            text="🎧  Sem o texto em inglês (escuta) — a frente mostra só o áudio; "
+                 "o inglês aparece na resposta",
             font=FONT_LABEL, text_color=COLOR_TEXT_DIM,
             fg_color=COLOR_ACCENT, hover_color=COLOR_ACCENT_HOVER,
             checkbox_width=20, checkbox_height=20,
         )
-        self.chk_escuta.pack(anchor="w", padx=18, pady=(10, 0))
-
-        self.chk_tresvel = ctk.CTkCheckBox(
-            card_acoes,
-            text="🐢 ▶ 🐇  Três velocidades — gera o áudio em inglês em lento, "
-                 "médio e rápido (3 players no card)",
-            font=FONT_LABEL, text_color=COLOR_TEXT_DIM,
-            fg_color=COLOR_ACCENT, hover_color=COLOR_ACCENT_HOVER,
-            checkbox_width=20, checkbox_height=20,
-        )
-        self.chk_tresvel.pack(anchor="w", padx=18, pady=(8, 0))
+        self.chk_escuta.pack(anchor="w", padx=18, pady=(8, 0))
 
         self.chk_imersao = ctk.CTkCheckBox(
             card_acoes,
-            text="🌊  Modo imersão — ouça sem ler; na resposta o português fica "
-                 "escondido (clique pra ver) e sem áudio PT",
+            text="🌊  Imersão — na resposta o português fica oculto (clique na "
+                 "setinha pra ver) e sem áudio em PT",
             font=FONT_LABEL, text_color=COLOR_TEXT_DIM,
             fg_color=COLOR_ACCENT, hover_color=COLOR_ACCENT_HOVER,
             checkbox_width=20, checkbox_height=20,
@@ -556,7 +577,7 @@ class AnkiApp(ctk.CTk):
 
     # -------- VIEW: MEUS BARALHOS (v3) --------
     def _build_view_biblioteca(self) -> ctk.CTkFrame:
-        view = ctk.CTkFrame(self.main, fg_color="transparent")
+        view = ctk.CTkFrame(self.view_host, fg_color="transparent")
         ctk.CTkLabel(
             view, text="Meus Baralhos", font=FONT_TITLE, text_color=COLOR_TEXT
         ).pack(anchor="w", pady=(0, 4))
@@ -565,8 +586,9 @@ class AnkiApp(ctk.CTk):
             text="Seus projetos salvos. Reabra pra editar os textos e gerar o baralho de novo.",
             font=FONT_LABEL, text_color=COLOR_TEXT_DIM,
         ).pack(anchor="w", pady=(0, 14))
-        self.biblioteca_scroll = ctk.CTkScrollableFrame(view, fg_color="transparent")
-        self.biblioteca_scroll.pack(fill="both", expand=True)
+        # Frame simples (o host externo já é rolável; evita rolagem aninhada).
+        self.biblioteca_scroll = ctk.CTkFrame(view, fg_color="transparent")
+        self.biblioteca_scroll.pack(fill="x", expand=False)
         return view
 
     def _refresh_biblioteca(self):
@@ -645,7 +667,7 @@ class AnkiApp(ctk.CTk):
 
     # -------- VIEW: CONFIG --------
     def _build_view_config(self) -> ctk.CTkFrame:
-        view = ctk.CTkFrame(self.main, fg_color="transparent")
+        view = ctk.CTkFrame(self.view_host, fg_color="transparent")
 
         ctk.CTkLabel(
             view, text="Configurações", font=FONT_TITLE, text_color=COLOR_TEXT
@@ -723,7 +745,7 @@ class AnkiApp(ctk.CTk):
 
     # -------- VIEW: BÔNUS --------
     def _build_view_bonus(self) -> ctk.CTkFrame:
-        view = ctk.CTkFrame(self.main, fg_color="transparent")
+        view = ctk.CTkFrame(self.view_host, fg_color="transparent")
 
         ctk.CTkLabel(
             view, text="🎁  Bônus", font=FONT_TITLE, text_color=COLOR_TEXT
@@ -911,7 +933,7 @@ class AnkiApp(ctk.CTk):
 
     # -------- VIEW: SOBRE --------
     def _build_view_sobre(self) -> ctk.CTkFrame:
-        view = ctk.CTkFrame(self.main, fg_color="transparent")
+        view = ctk.CTkFrame(self.view_host, fg_color="transparent")
         ctk.CTkLabel(
             view, text="Sobre", font=FONT_TITLE, text_color=COLOR_TEXT
         ).pack(anchor="w", pady=(0, 4))
@@ -1120,8 +1142,8 @@ class AnkiApp(ctk.CTk):
 
         self.cancel_event.clear()
         self.running = True
-        self._sem_legenda = bool(self.chk_escuta.get())  # modo escuta: card só com áudio
-        self._tres_vel = bool(self.chk_tresvel.get())  # 3 velocidades no áudio EN
+        self._sem_legenda = bool(self.chk_escuta.get())  # escuta: sem texto EN na frente
+        self._tres_vel = True  # 3 velocidades é regra fixa agora
         self._imersao = bool(self.chk_imersao.get())  # imersão: PT escondido, sem áudio PT
         self.btn_gerar.configure(state="disabled")
         self.btn_cancelar.configure(state="normal")
@@ -1152,7 +1174,7 @@ class AnkiApp(ctk.CTk):
             frases_dir = os.path.join(projeto_dir, "frases")
             os.makedirs(frases_dir, exist_ok=True)
 
-            por_frase = 5 if getattr(self, "_tres_vel", False) else 3  # en,pt,mix(+lento,rapido)
+            por_frase = 3  # en, pt, mix (a velocidade é no player, não gera lento/rápido)
             total = (len(frases_en) * por_frase) + 2 + 2  # +2 áudios completos +2 (anki+pdf)
             done = 0
             log.info(f"Iniciando projeto '{nome_deck}' ({len(frases_en)} frases)")
@@ -1200,12 +1222,25 @@ class AnkiApp(ctk.CTk):
 
             self._set_progress(total, total, "Finalizado!")
             log.info(f"Projeto finalizado: {projeto_dir}")
-            self.after(0, lambda: messagebox.showinfo(
-                "Concluído",
-                f"Projeto criado em:\n{os.path.abspath(projeto_dir)}\n\n"
-                f"• Baralho: {os.path.basename(apkg_path)}\n"
-                f"• PDF: {os.path.basename(pdf_path)}",
-            ))
+            pasta_abs = os.path.abspath(projeto_dir)
+            apkg_nome = os.path.basename(apkg_path)
+            pdf_nome = os.path.basename(pdf_path)
+
+            def _concluido():
+                abrir = messagebox.askyesno(
+                    "Concluído",
+                    f"Projeto criado em:\n{pasta_abs}\n\n"
+                    f"• Baralho: {apkg_nome}\n"
+                    f"• PDF: {pdf_nome}\n\n"
+                    "Abrir a pasta agora?",
+                )
+                if abrir:
+                    try:
+                        os.startfile(pasta_abs)
+                    except Exception:
+                        log.exception("Falha ao abrir a pasta do projeto")
+
+            self.after(0, _concluido)
         except asyncio.CancelledError:
             self._status("Cancelado.")
             log.info("Cancelado")
@@ -1245,21 +1280,8 @@ class AnkiApp(ctk.CTk):
             )
             done += 1
             self._set_progress(done, total, f"Áudio MIX {i}/{len(frases_en)}")
-
-            if getattr(self, "_tres_vel", False):
-                base = int(self.config_data["rate"])
-                r_lento = format_rate(max(-50, base - 30))
-                r_rapido = format_rate(min(50, base + 25))
-                await gerar_audio_async(
-                    en, voz_en, f"{frases_dir}/{i:03}_en_lento.mp3", r_lento, self.cancel_event,
-                )
-                done += 1
-                self._set_progress(done, total, f"Áudio lento {i}/{len(frases_en)}")
-                await gerar_audio_async(
-                    en, voz_en, f"{frases_dir}/{i:03}_en_rapido.mp3", r_rapido, self.cancel_event,
-                )
-                done += 1
-                self._set_progress(done, total, f"Áudio rápido {i}/{len(frases_en)}")
+            # Lento/rápido NÃO são mais gerados: a velocidade é controlada no
+            # próprio card (playbackRate) a partir do áudio médio.
 
         await gerar_audio_async(
             texto_en, voz_en, f"{projeto_dir}/texto_completo_en.mp3",
@@ -1290,95 +1312,97 @@ class AnkiApp(ctk.CTk):
         """
 
         sem_legenda = getattr(self, "_sem_legenda", False)
-        tres_vel = getattr(self, "_tres_vel", False)
         imersao = getattr(self, "_imersao", False)
-        css += ("\n.players{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:8px 0}"
-                "\n.spd{font-size:13px;color:#8b949e}"
+        css += ("\n.players{display:flex;flex-direction:column;align-items:center;gap:8px;margin:10px 0}"
+                "\n.auto{font-size:13px;color:#8b949e}"
+                "\naudio.spd{width:280px;max-width:92%}"
+                "\n.spdrow{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}"
+                "\n.spdrow button{font-family:inherit;font-size:14px;cursor:pointer;color:#e6edf3;"
+                "background:#1b2430;border:1px solid #2ea88a;border-radius:8px;padding:6px 14px}"
+                "\n.spdrow button:hover{background:#2ea88a;color:#0f1419}"
+                "\n.spdrow button.on{background:#2ea88a;color:#0f1419}"
                 "\n.hint{color:#8b949e;font-size:14px;margin-bottom:12px}"
                 "\n.trad{margin-top:14px}.trad summary{cursor:pointer;color:#2ea88a;font-size:14px}"
                 "\n.trad .pt{margin-top:8px}\n")
 
-        # Players de áudio EN: 1 velocidade, ou 3 (lento/médio/rápido) via campos
-        # condicionais do Anki — os campos lento/rápido ficam vazios quando não marcado.
+        # Áudio EN: UM player + botões de velocidade que mudam a playbackRate (a
+        # "escala"). Usa um arquivo só (o médio); lento/rápido são a mesma gravação
+        # tocada mais devagar/rápido. O médio ainda toca sozinho via [sound:]
+        # (mecanismo nativo do Anki, garantido). O player HTML5 é pra reouvir na
+        # velocidade escolhida.
         players_en = (
             "<div class='players'>"
-            "{{#AudioEN_lento}}<div class='spd'>🐢 lento<br>{{AudioEN_lento}}</div>{{/AudioEN_lento}}"
-            "<div class='spd'>▶ médio<br>{{AudioEN}}</div>"
-            "{{#AudioEN_rapido}}<div class='spd'>🐇 rápido<br>{{AudioEN_rapido}}</div>{{/AudioEN_rapido}}"
-            "</div>"
+            "<div class='auto'>▶ médio (toca automático) {{AudioEN}}</div>"
+            "<audio class='spd' controls preload='metadata' src='{{ArqEN}}'></audio>"
+            "<div class='spdrow'>"
+            "<button type='button' onclick='akSpd(this,0.75)'>🐢 lento</button>"
+            "<button type='button' onclick='akSpd(this,1)'>▶ normal</button>"
+            "<button type='button' onclick='akSpd(this,1.3)'>🐇 rápido</button>"
+            "</div></div>"
+            "<script>function akSpd(btn,r){var a=document.querySelector('audio.spd');"
+            "if(!a)return;a.playbackRate=r;a.currentTime=0;a.play();"
+            "var bs=btn.parentElement.getElementsByTagName('button');"
+            "for(var i=0;i<bs.length;i++)bs[i].className='';btn.className='on';}</script>"
         )
         fields_def = [
             {"name": "Ingles"},
             {"name": "Portugues"},
-            {"name": "AudioEN_lento"},
-            {"name": "AudioEN"},
-            {"name": "AudioEN_rapido"},
+            {"name": "AudioEN"},   # [sound:001_en.mp3] -> autoplay médio (nativo)
+            {"name": "ArqEN"},     # 001_en.mp3 (nome puro) -> player HTML5 com velocidade
             {"name": "AudioPT"},
             {"name": "Autor"},
         ]
+        # 3 velocidades é regra fixa (sempre). Duas flags INDEPENDENTES definem o
+        # layout, e se combinam sozinhas:
+        #   sem_legenda (🎧): tira o inglês da FRENTE (só áudio); o EN vai pra resposta.
+        #   imersao (🌊): oculta o PT numa setinha que expande e remove o áudio PT.
+        front_en = "" if sem_legenda else "<br>{{Ingles}}"
+        # o inglês só reaparece na resposta quando NÃO estava na frente
+        back_en = "{{Ingles}}<br>" if sem_legenda else ""
         if imersao:
-            model = genanki.Model(
-                MODEL_ID + 4, "Imersão v3 (PT escondido, sem áudio PT)",
-                fields=fields_def,
-                templates=[{
-                    "name": "Imersão",
-                    "qfmt": "<div class='hint'>🌊 Imersão</div>" + players_en + "<br>{{Ingles}}",
-                    "afmt": "{{FrontSide}}<hr>"
-                            + "<details class='trad'><summary>👁 ver tradução (PT)</summary>"
-                            + "<div class='pt'>{{Portugues}}</div></details>"
-                            + "<div class='autor'>{{Autor}}</div>",
-                }],
-                css=css,
-            )
-        elif sem_legenda:
-            model = genanki.Model(
-                MODEL_ID + 3, "Escuta v3 (áudio → texto)",
-                fields=fields_def,
-                templates=[{
-                    "name": "Escuta",
-                    "qfmt": "<div class='hint'>🎧 Ouça e tente entender</div>" + players_en,
-                    "afmt": "{{FrontSide}}<hr>{{Ingles}}<br>"
-                            "<div class='pt'>{{Portugues}}</div>{{AudioPT}}"
-                            "<div class='autor'>{{Autor}}</div>",
-                }],
-                css=css,
-            )
+            back_pt = ("<details class='trad'><summary>👁 ver tradução (PT)</summary>"
+                       "<div class='pt'>{{Portugues}}</div></details>")
         else:
-            model = genanki.Model(
-                MODEL_ID + 2, "EN <-> PT com Áudio v3",
-                fields=fields_def,
-                templates=[
-                    {
-                        "name": "EN -> PT",
-                        "qfmt": players_en + "<br>{{Ingles}}",
-                        "afmt": "{{FrontSide}}<hr><div class='pt'>{{Portugues}}</div>"
-                                "{{AudioPT}}<div class='autor'>{{Autor}}</div>",
-                    },
-                    {
-                        "name": "PT -> EN",
-                        "qfmt": "<div class='pt'>{{Portugues}}</div>",
-                        "afmt": "{{FrontSide}}<hr>{{Ingles}}" + players_en
-                                + "<div class='autor'>{{Autor}}</div>",
-                    },
-                ],
-                css=css,
-            )
+            back_pt = "<div class='pt'>{{Portugues}}</div>{{AudioPT}}"
+        hint = ""
+        if sem_legenda:  # texto escondido → faz sentido pedir pra ouvir
+            emoji = "🎧" + ("🌊" if imersao else "")
+            hint = f"<div class='hint'>{emoji} Ouça e tente entender</div>"
+        elif imersao:  # texto visível, só sinaliza o modo
+            hint = "<div class='hint'>🌊 Imersão</div>"
+        variante = (1 if sem_legenda else 0) + (2 if imersao else 0)  # 0..3
+        nomes = {
+            0: "EN + Áudio v3",
+            1: "Escuta v3 (sem texto EN)",
+            2: "Imersão v3 (PT oculto, sem áudio PT)",
+            3: "Imersão + Escuta v3",
+        }
+        model = genanki.Model(
+            # +20: campos mudaram (player único + velocidade); ID novo pra não
+            # conflitar com baralhos já importados do modelo antigo (+10).
+            MODEL_ID + 20 + variante, nomes[variante],
+            fields=fields_def,
+            templates=[{
+                "name": "Card",
+                "qfmt": hint + players_en + front_en,
+                "afmt": "{{FrontSide}}<hr>" + back_en + back_pt
+                        + "<div class='autor'>{{Autor}}</div>",
+            }],
+            css=css,
+        )
 
         deck = genanki.Deck(deck_id, nome_deck)
         media_files = []
 
         for i, (en, pt) in enumerate(zip(frases_en, frases_pt), start=1):
-            a_lento = f"[sound:{i:03}_en_lento.mp3]" if tres_vel else ""
-            a_rapido = f"[sound:{i:03}_en_rapido.mp3]" if tres_vel else ""
             note = genanki.Note(
                 model=model,
                 fields=[
                     en,
                     pt,
-                    a_lento,
-                    f"[sound:{i:03}_en.mp3]",
-                    a_rapido,
-                    f"[sound:{i:03}_pt.mp3]",
+                    f"[sound:{i:03}_en.mp3]",   # AudioEN: autoplay médio (nativo)
+                    f"{i:03}_en.mp3",           # ArqEN: nome puro p/ o player HTML5
+                    f"[sound:{i:03}_pt.mp3]",   # AudioPT
                     autor,
                 ],
             )
@@ -1388,11 +1412,6 @@ class AnkiApp(ctk.CTk):
                 f"{frases_dir}/{i:03}_pt.mp3",
                 f"{frases_dir}/{i:03}_mix.mp3",
             ])
-            if tres_vel:
-                media_files.extend([
-                    f"{frases_dir}/{i:03}_en_lento.mp3",
-                    f"{frases_dir}/{i:03}_en_rapido.mp3",
-                ])
 
         pacote = genanki.Package(deck)
         pacote.media_files = media_files
