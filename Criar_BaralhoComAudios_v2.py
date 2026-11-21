@@ -512,6 +512,16 @@ class AnkiApp(ctk.CTk):
         )
         self.chk_escuta.pack(anchor="w", padx=18, pady=(10, 0))
 
+        self.chk_tresvel = ctk.CTkCheckBox(
+            card_acoes,
+            text="🐢 ▶ 🐇  Três velocidades — gera o áudio em inglês em lento, "
+                 "médio e rápido (3 players no card)",
+            font=FONT_LABEL, text_color=COLOR_TEXT_DIM,
+            fg_color=COLOR_ACCENT, hover_color=COLOR_ACCENT_HOVER,
+            checkbox_width=20, checkbox_height=20,
+        )
+        self.chk_tresvel.pack(anchor="w", padx=18, pady=(8, 0))
+
         botoes = ctk.CTkFrame(card_acoes, fg_color="transparent")
         botoes.pack(fill="x", padx=14, pady=14)
         self.btn_gerar = ctk.CTkButton(
@@ -1101,6 +1111,7 @@ class AnkiApp(ctk.CTk):
         self.cancel_event.clear()
         self.running = True
         self._sem_legenda = bool(self.chk_escuta.get())  # modo escuta: card só com áudio
+        self._tres_vel = bool(self.chk_tresvel.get())  # 3 velocidades no áudio EN
         self.btn_gerar.configure(state="disabled")
         self.btn_cancelar.configure(state="normal")
 
@@ -1130,7 +1141,8 @@ class AnkiApp(ctk.CTk):
             frases_dir = os.path.join(projeto_dir, "frases")
             os.makedirs(frases_dir, exist_ok=True)
 
-            total = (len(frases_en) * 3) + 2 + 2  # +2 áudios completos +2 (anki+pdf)
+            por_frase = 5 if getattr(self, "_tres_vel", False) else 3  # en,pt,mix(+lento,rapido)
+            total = (len(frases_en) * por_frase) + 2 + 2  # +2 áudios completos +2 (anki+pdf)
             done = 0
             log.info(f"Iniciando projeto '{nome_deck}' ({len(frases_en)} frases)")
 
@@ -1223,6 +1235,21 @@ class AnkiApp(ctk.CTk):
             done += 1
             self._set_progress(done, total, f"Áudio MIX {i}/{len(frases_en)}")
 
+            if getattr(self, "_tres_vel", False):
+                base = int(self.config_data["rate"])
+                r_lento = format_rate(max(-50, base - 30))
+                r_rapido = format_rate(min(50, base + 25))
+                await gerar_audio_async(
+                    en, voz_en, f"{frases_dir}/{i:03}_en_lento.mp3", r_lento, self.cancel_event,
+                )
+                done += 1
+                self._set_progress(done, total, f"Áudio lento {i}/{len(frases_en)}")
+                await gerar_audio_async(
+                    en, voz_en, f"{frases_dir}/{i:03}_en_rapido.mp3", r_rapido, self.cancel_event,
+                )
+                done += 1
+                self._set_progress(done, total, f"Áudio rápido {i}/{len(frases_en)}")
+
         await gerar_audio_async(
             texto_en, voz_en, f"{projeto_dir}/texto_completo_en.mp3",
             rate, self.cancel_event,
@@ -1252,55 +1279,58 @@ class AnkiApp(ctk.CTk):
         """
 
         sem_legenda = getattr(self, "_sem_legenda", False)
+        tres_vel = getattr(self, "_tres_vel", False)
+        css += ("\n.players{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:8px 0}"
+                "\n.spd{font-size:13px;color:#8b949e}"
+                "\n.hint{color:#8b949e;font-size:14px;margin-bottom:12px}\n")
+
+        # Players de áudio EN: 1 velocidade, ou 3 (lento/médio/rápido) via campos
+        # condicionais do Anki — os campos lento/rápido ficam vazios quando não marcado.
+        players_en = (
+            "<div class='players'>"
+            "{{#AudioEN_lento}}<div class='spd'>🐢 lento<br>{{AudioEN_lento}}</div>{{/AudioEN_lento}}"
+            "<div class='spd'>▶ médio<br>{{AudioEN}}</div>"
+            "{{#AudioEN_rapido}}<div class='spd'>🐇 rápido<br>{{AudioEN_rapido}}</div>{{/AudioEN_rapido}}"
+            "</div>"
+        )
+        fields_def = [
+            {"name": "Ingles"},
+            {"name": "Portugues"},
+            {"name": "AudioEN_lento"},
+            {"name": "AudioEN"},
+            {"name": "AudioEN_rapido"},
+            {"name": "AudioPT"},
+            {"name": "Autor"},
+        ]
         if sem_legenda:
-            # Modo escuta: frente só com o áudio (sem texto); texto na resposta.
-            css_escuta = css + "\n.hint{color:#8b949e;font-size:14px;margin-bottom:14px}\n"
             model = genanki.Model(
-                MODEL_ID + 1,
-                "Escuta (áudio → texto)",
-                fields=[
-                    {"name": "Ingles"},
-                    {"name": "Portugues"},
-                    {"name": "AudioEN"},
-                    {"name": "AudioPT"},
-                    {"name": "Autor"},
-                ],
-                templates=[
-                    {
-                        "name": "Escuta",
-                        "qfmt": "<div class='hint'>🎧 Ouça e tente entender</div>{{AudioEN}}",
-                        "afmt": "{{FrontSide}}<hr>{{Ingles}}<br>"
-                                "<div class='pt'>{{Portugues}}</div>{{AudioPT}}"
-                                "<div class='autor'>{{Autor}}</div>",
-                    },
-                ],
-                css=css_escuta,
+                MODEL_ID + 3, "Escuta v3 (áudio → texto)",
+                fields=fields_def,
+                templates=[{
+                    "name": "Escuta",
+                    "qfmt": "<div class='hint'>🎧 Ouça e tente entender</div>" + players_en,
+                    "afmt": "{{FrontSide}}<hr>{{Ingles}}<br>"
+                            "<div class='pt'>{{Portugues}}</div>{{AudioPT}}"
+                            "<div class='autor'>{{Autor}}</div>",
+                }],
+                css=css,
             )
         else:
             model = genanki.Model(
-                MODEL_ID,
-                "EN <-> PT com Áudio",
-                fields=[
-                    {"name": "Ingles"},
-                    {"name": "Portugues"},
-                    {"name": "AudioEN"},
-                    {"name": "AudioPT"},
-                    {"name": "Autor"},
-                ],
+                MODEL_ID + 2, "EN <-> PT com Áudio v3",
+                fields=fields_def,
                 templates=[
                     {
                         "name": "EN -> PT",
-                        "qfmt": "{{AudioEN}}<br><br>{{Ingles}}",
-                        "afmt": "{{FrontSide}}<hr>"
-                                "<div class='pt'>{{Portugues}}</div>"
-                                "{{AudioPT}}"
-                                "<div class='autor'>{{Autor}}</div>",
+                        "qfmt": players_en + "<br>{{Ingles}}",
+                        "afmt": "{{FrontSide}}<hr><div class='pt'>{{Portugues}}</div>"
+                                "{{AudioPT}}<div class='autor'>{{Autor}}</div>",
                     },
                     {
                         "name": "PT -> EN",
                         "qfmt": "<div class='pt'>{{Portugues}}</div>",
-                        "afmt": "{{FrontSide}}<hr>{{Ingles}}<br>{{AudioEN}}"
-                                "<div class='autor'>{{Autor}}</div>",
+                        "afmt": "{{FrontSide}}<hr>{{Ingles}}" + players_en
+                                + "<div class='autor'>{{Autor}}</div>",
                     },
                 ],
                 css=css,
@@ -1310,12 +1340,16 @@ class AnkiApp(ctk.CTk):
         media_files = []
 
         for i, (en, pt) in enumerate(zip(frases_en, frases_pt), start=1):
+            a_lento = f"[sound:{i:03}_en_lento.mp3]" if tres_vel else ""
+            a_rapido = f"[sound:{i:03}_en_rapido.mp3]" if tres_vel else ""
             note = genanki.Note(
                 model=model,
                 fields=[
                     en,
                     pt,
+                    a_lento,
                     f"[sound:{i:03}_en.mp3]",
+                    a_rapido,
                     f"[sound:{i:03}_pt.mp3]",
                     autor,
                 ],
@@ -1326,6 +1360,11 @@ class AnkiApp(ctk.CTk):
                 f"{frases_dir}/{i:03}_pt.mp3",
                 f"{frases_dir}/{i:03}_mix.mp3",
             ])
+            if tres_vel:
+                media_files.extend([
+                    f"{frases_dir}/{i:03}_en_lento.mp3",
+                    f"{frases_dir}/{i:03}_en_rapido.mp3",
+                ])
 
         pacote = genanki.Package(deck)
         pacote.media_files = media_files
