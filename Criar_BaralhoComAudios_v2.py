@@ -502,30 +502,28 @@ class AnkiApp(ctk.CTk):
         )
         self.lbl_status.pack(anchor="w", padx=18)
 
+        self.lbl_tresvel = ctk.CTkLabel(
+            card_acoes,
+            text="🐢 ▶ 🐇  Todo baralho já vem em 3 velocidades (lento / médio "
+                 "automático / rápido).",
+            font=FONT_LABEL, text_color=COLOR_TEXT_DIM, anchor="w", justify="left",
+        )
+        self.lbl_tresvel.pack(anchor="w", padx=18, pady=(10, 2))
+
         self.chk_escuta = ctk.CTkCheckBox(
             card_acoes,
-            text="🎧  Sem legenda (escuta apenas) — o card mostra só o áudio; "
-                 "o texto aparece na resposta",
+            text="🎧  Sem o texto em inglês (escuta) — a frente mostra só o áudio; "
+                 "o inglês aparece na resposta",
             font=FONT_LABEL, text_color=COLOR_TEXT_DIM,
             fg_color=COLOR_ACCENT, hover_color=COLOR_ACCENT_HOVER,
             checkbox_width=20, checkbox_height=20,
         )
-        self.chk_escuta.pack(anchor="w", padx=18, pady=(10, 0))
-
-        self.chk_tresvel = ctk.CTkCheckBox(
-            card_acoes,
-            text="🐢 ▶ 🐇  Três velocidades — gera o áudio em inglês em lento, "
-                 "médio e rápido (3 players no card)",
-            font=FONT_LABEL, text_color=COLOR_TEXT_DIM,
-            fg_color=COLOR_ACCENT, hover_color=COLOR_ACCENT_HOVER,
-            checkbox_width=20, checkbox_height=20,
-        )
-        self.chk_tresvel.pack(anchor="w", padx=18, pady=(8, 0))
+        self.chk_escuta.pack(anchor="w", padx=18, pady=(8, 0))
 
         self.chk_imersao = ctk.CTkCheckBox(
             card_acoes,
-            text="🌊  Modo imersão — ouça sem ler; na resposta o português fica "
-                 "escondido (clique pra ver) e sem áudio PT",
+            text="🌊  Imersão — na resposta o português fica oculto (clique na "
+                 "setinha pra ver) e sem áudio em PT",
             font=FONT_LABEL, text_color=COLOR_TEXT_DIM,
             fg_color=COLOR_ACCENT, hover_color=COLOR_ACCENT_HOVER,
             checkbox_width=20, checkbox_height=20,
@@ -1120,8 +1118,8 @@ class AnkiApp(ctk.CTk):
 
         self.cancel_event.clear()
         self.running = True
-        self._sem_legenda = bool(self.chk_escuta.get())  # modo escuta: card só com áudio
-        self._tres_vel = bool(self.chk_tresvel.get())  # 3 velocidades no áudio EN
+        self._sem_legenda = bool(self.chk_escuta.get())  # escuta: sem texto EN na frente
+        self._tres_vel = True  # 3 velocidades é regra fixa agora
         self._imersao = bool(self.chk_imersao.get())  # imersão: PT escondido, sem áudio PT
         self.btn_gerar.configure(state="disabled")
         self.btn_cancelar.configure(state="normal")
@@ -1152,7 +1150,7 @@ class AnkiApp(ctk.CTk):
             frases_dir = os.path.join(projeto_dir, "frases")
             os.makedirs(frases_dir, exist_ok=True)
 
-            por_frase = 5 if getattr(self, "_tres_vel", False) else 3  # en,pt,mix(+lento,rapido)
+            por_frase = 5  # en, pt, mix, lento, rápido — 3 velocidades é regra fixa
             total = (len(frases_en) * por_frase) + 2 + 2  # +2 áudios completos +2 (anki+pdf)
             done = 0
             log.info(f"Iniciando projeto '{nome_deck}' ({len(frases_en)} frases)")
@@ -1246,7 +1244,7 @@ class AnkiApp(ctk.CTk):
             done += 1
             self._set_progress(done, total, f"Áudio MIX {i}/{len(frases_en)}")
 
-            if getattr(self, "_tres_vel", False):
+            if True:  # 3 velocidades (lento/rápido) é regra fixa agora
                 base = int(self.config_data["rate"])
                 r_lento = format_rate(max(-50, base - 30))
                 r_rapido = format_rate(min(50, base + 25))
@@ -1290,7 +1288,7 @@ class AnkiApp(ctk.CTk):
         """
 
         sem_legenda = getattr(self, "_sem_legenda", False)
-        tres_vel = getattr(self, "_tres_vel", False)
+        tres_vel = True  # 3 velocidades (lento/médio/rápido) é regra fixa agora
         imersao = getattr(self, "_imersao", False)
         css += ("\n.players{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:8px 0}"
                 "\n.spd{font-size:13px;color:#8b949e}"
@@ -1320,53 +1318,42 @@ class AnkiApp(ctk.CTk):
             {"name": "AudioPT"},
             {"name": "Autor"},
         ]
+        # 3 velocidades é regra fixa (sempre). Duas flags INDEPENDENTES definem o
+        # layout, e se combinam sozinhas:
+        #   sem_legenda (🎧): tira o inglês da FRENTE (só áudio); o EN vai pra resposta.
+        #   imersao (🌊): oculta o PT numa setinha que expande e remove o áudio PT.
+        front_en = "" if sem_legenda else "<br>{{Ingles}}"
+        # o inglês só reaparece na resposta quando NÃO estava na frente
+        back_en = "{{Ingles}}<br>" if sem_legenda else ""
         if imersao:
-            model = genanki.Model(
-                MODEL_ID + 4, "Imersão v3 (PT escondido, sem áudio PT)",
-                fields=fields_def,
-                templates=[{
-                    "name": "Imersão",
-                    "qfmt": "<div class='hint'>🌊 Imersão</div>" + players_en + "<br>{{Ingles}}",
-                    "afmt": "{{FrontSide}}<hr>"
-                            + "<details class='trad'><summary>👁 ver tradução (PT)</summary>"
-                            + "<div class='pt'>{{Portugues}}</div></details>"
-                            + "<div class='autor'>{{Autor}}</div>",
-                }],
-                css=css,
-            )
-        elif sem_legenda:
-            model = genanki.Model(
-                MODEL_ID + 3, "Escuta v3 (áudio → texto)",
-                fields=fields_def,
-                templates=[{
-                    "name": "Escuta",
-                    "qfmt": "<div class='hint'>🎧 Ouça e tente entender</div>" + players_en,
-                    "afmt": "{{FrontSide}}<hr>{{Ingles}}<br>"
-                            "<div class='pt'>{{Portugues}}</div>{{AudioPT}}"
-                            "<div class='autor'>{{Autor}}</div>",
-                }],
-                css=css,
-            )
+            back_pt = ("<details class='trad'><summary>👁 ver tradução (PT)</summary>"
+                       "<div class='pt'>{{Portugues}}</div></details>")
         else:
-            model = genanki.Model(
-                MODEL_ID + 2, "EN <-> PT com Áudio v3",
-                fields=fields_def,
-                templates=[
-                    {
-                        "name": "EN -> PT",
-                        "qfmt": players_en + "<br>{{Ingles}}",
-                        "afmt": "{{FrontSide}}<hr><div class='pt'>{{Portugues}}</div>"
-                                "{{AudioPT}}<div class='autor'>{{Autor}}</div>",
-                    },
-                    {
-                        "name": "PT -> EN",
-                        "qfmt": "<div class='pt'>{{Portugues}}</div>",
-                        "afmt": "{{FrontSide}}<hr>{{Ingles}}" + players_en
-                                + "<div class='autor'>{{Autor}}</div>",
-                    },
-                ],
-                css=css,
-            )
+            back_pt = "<div class='pt'>{{Portugues}}</div>{{AudioPT}}"
+        hint = ""
+        if sem_legenda:  # texto escondido → faz sentido pedir pra ouvir
+            emoji = "🎧" + ("🌊" if imersao else "")
+            hint = f"<div class='hint'>{emoji} Ouça e tente entender</div>"
+        elif imersao:  # texto visível, só sinaliza o modo
+            hint = "<div class='hint'>🌊 Imersão</div>"
+        variante = (1 if sem_legenda else 0) + (2 if imersao else 0)  # 0..3
+        nomes = {
+            0: "EN + Áudio v3",
+            1: "Escuta v3 (sem texto EN)",
+            2: "Imersão v3 (PT oculto, sem áudio PT)",
+            3: "Imersão + Escuta v3",
+        }
+        model = genanki.Model(
+            MODEL_ID + 10 + variante, nomes[variante],
+            fields=fields_def,
+            templates=[{
+                "name": "Card",
+                "qfmt": hint + players_en + front_en,
+                "afmt": "{{FrontSide}}<hr>" + back_en + back_pt
+                        + "<div class='autor'>{{Autor}}</div>",
+            }],
+            css=css,
+        )
 
         deck = genanki.Deck(deck_id, nome_deck)
         media_files = []
