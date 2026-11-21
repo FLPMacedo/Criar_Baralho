@@ -1322,8 +1322,8 @@ class AnkiApp(ctk.CTk):
                 fields=fields_def,
                 templates=[{
                     "name": "Imersão",
-                    "qfmt": "<div class='hint'>🌊 Imersão — ouça sem ler</div>" + players_en,
-                    "afmt": "{{FrontSide}}<hr>{{Ingles}}" + players_en
+                    "qfmt": "<div class='hint'>🌊 Imersão</div>" + players_en + "<br>{{Ingles}}",
+                    "afmt": "{{FrontSide}}<hr>"
                             + "<details class='trad'><summary>👁 ver tradução (PT)</summary>"
                             + "<div class='pt'>{{Portugues}}</div></details>"
                             + "<div class='autor'>{{Autor}}</div>",
