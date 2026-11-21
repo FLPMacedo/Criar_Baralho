@@ -24,3 +24,5 @@ config_v2.json
 
 # bonus binario (nao versionar)
 assets/bonus/*.exe
+.gemini_key
+textos_21temas.db
